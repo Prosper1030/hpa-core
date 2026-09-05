@@ -1,5 +1,128 @@
 # hpa-core
 
+**Dual-beam structural analysis kernel for a human-powered aircraft wing.**
+Trusted computational kernel — `numpy` + `scipy` only. 4,610 lines. 27 passing tests.
+
+Part of the [HPA-MDO project](https://github.com/Prosper1030/hpa-mdo-framework) —
+**start there** for project context.
+
+---
+
+## What it solves
+
+A human-powered aircraft wing (33 m span, 6.5 m/s cruise) carried by **two spanwise spars**
+braced by **lift wires**, under a mapped spanwise aerodynamic load. The kernel assembles and
+solves the coupled structural problem and reports what the design loop needs to decide whether
+a candidate closes.
+
+**Input:** one fully-built `DualBeamMainlineModel` — node coordinates, per-segment section
+properties, material constants, the spanwise load distribution, wire and rib-link definitions,
+and the constraint set. The caller builds it; the kernel does not.
+
+**Output:** deflection and twist distributions, von Mises stress per spar, a failure index
+(`<= 0` passes), reaction forces, wire tensions with utilisation, spar mass, and a smooth
+aggregated feasibility summary suitable for use as optimizer constraints.
+
+**Method:** Timoshenko beam elements, 6 DOF per node (`ux, uy, uz, θx, θy, θz`; for a spanwise
+Y-axis beam, torsion about the span axis is `θy`). Dual-spar equivalent stiffness uses the
+parallel-axis theorem for `EI` and a warping-coupled term for `GJ`. Lift-wire support enters as
+a vertical-deflection constraint at the attachment joints. The element code is **complex-step
+differentiable**, so exact derivatives are available to gradient-based optimizers.
+
+## Why the dependency boundary is this narrow
+
+```text
+application / builder  →  prepared DualBeamMainlineModel  →  hpa-core kernel
+```
+
+The kernel reads no configuration, opens no files, and does not know what an aircraft is. Model
+construction — configuration parsing, material lookup, aerodynamic load generation, geometry
+assembly — stays on the application side of that seam, **even when moving a helper across would
+be convenient**. A pure-numpy routine converting installed wire pre-tension to unstretched length
+would be easier to test in here; it stays out, because it is model construction.
+
+The point of the boundary is that it is not negotiated case by case. Admission requires four
+conditions at once — mature, still needed, on the current-or-future mainline, and worth the cost
+of freezing — plus the two hard constraints above. *"Reusable"*, *"general"* and *"pure
+function"* are explicitly **not** sufficient reasons; that criterion is how kernels grow until
+they can no longer be trusted.
+
+**Not in here, and not to be added:** model builders, OpenMDAO and any optimization driver, the
+configuration schema, aerodynamic load generation and mapping, the material database, ANSYS /
+CalculiX export, all CFD and meshing (see
+[`hpa-meshing`](https://github.com/Prosper1030/hpa-meshing)), workflow orchestration.
+
+## Quick start
+
+```bash
+uv venv --python 3.10.18 .venv
+uv pip install --python .venv/bin/python numpy scipy pytest
+uv pip install --python .venv/bin/python --no-deps --editable .
+
+.venv/bin/python examples/run_snapshot.py        # shortest end-to-end use
+.venv/bin/hpa-core run tests/fixtures/dual_beam_mainline/track_s_rerun_snapshot_model.json
+```
+
+The CLI does exactly what the example does: **serialization → kernel → presentation**.
+
+## Validation status
+
+`pytest` → **27 passed**. No external solver and no application-layer package required.
+
+Tests run against `tests/fixtures/.../track_s_rerun_snapshot_model.json` — a model snapshot
+produced by the upstream application repository and verified bit-for-bit on extraction.
+
+**What that establishes, and what it does not.** Coverage is *deep on one model*, not *broad
+across the design space*. It confirms the kernel reproduces a known-good result exactly and that
+refactoring has not changed its numerics. It does not establish accuracy across the whole design
+envelope, and there is no independent FE cross-check inside this repository — ANSYS APDL,
+NASTRAN and CalculiX exports live in the application layer and are used for that separately.
+
+### Reading the bundled example output
+
+```text
+failure index               -0.639878   (<= 0 passes)
+analysis succeeded       True
+overall hard feasible    False
+hard failures            ['moment_closure']
+```
+
+**`overall hard feasible: False` is not a solver failure.** The bundled snapshot is a real
+intermediate design state that does not close on moment balance. The solver ran correctly and
+reported that honestly. `analysis succeeded: True` and `overall hard feasible: False` are
+independent statements — the first is about the computation, the second about the design.
+Reporting an infeasible design as infeasible is the kernel working.
+
+## Known limitations
+
+- Single-fixture validation (above).
+- Linear static analysis. No geometric nonlinearity, no dynamics, no buckling eigenvalue
+  analysis inside the kernel.
+- No aeroelastic coupling here — load mapping and fluid-structure iteration are application-layer
+  concerns.
+- The kernel trusts its input. A malformed model is the caller's responsibility.
+
+## Modification discipline
+
+Changes to numerical equations, tolerances or safety factors are **outside the scope of routine
+maintenance** in this repository. No reformatting, no renaming, no drive-by fixes: lint warnings
+carried over from extraction were kept deliberately so the migration stayed verifiable as
+byte-identical.
+
+`fem/elements.py` contains `+1e-30` guards, `np.result_type` calls and a custom `_cs_norm`. These
+look like redundant defensive code. They are **required for complex-step differentiation**;
+removing them breaks `check_partials()` silently.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+# 詳細開發文件（繁體中文）
+
+以下為原有的工程與開發說明，維持繁體中文。
+
 人力飛機雙梁結構分析核心（trusted computational kernel）。
 
 這個 repo 只放**成熟到不應該再被實驗性開發隨手修改**的計算核心。它的外部依賴
