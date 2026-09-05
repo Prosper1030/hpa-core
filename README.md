@@ -1,7 +1,8 @@
 # hpa-core
 
 **Dual-beam structural analysis kernel for a human-powered aircraft wing.**
-Trusted computational kernel — `numpy` + `scipy` only. 4,610 lines. 27 passing tests.
+**One** trusted computational kernel — not a library of them. `numpy` + `scipy` only.
+22 files, 4,610 lines, 27 passing tests.
 
 Part of the [HPA-MDO project](https://github.com/Prosper1030/hpa-mdo-framework) —
 **start there** for project context.
@@ -50,7 +51,7 @@ they can no longer be trusted.
 **Not in here, and not to be added:** model builders, OpenMDAO and any optimization driver, the
 configuration schema, aerodynamic load generation and mapping, the material database, ANSYS /
 CalculiX export, all CFD and meshing (see
-[`hpa-meshing`](https://github.com/Prosper1030/hpa-meshing)), workflow orchestration.
+`hpa-meshing`, publication pending), workflow orchestration.
 
 ## Quick start
 
